@@ -3,6 +3,7 @@ package com.taifdigital.adawati
 import android.content.Context
 import android.content.Intent
 import android.graphics.BitmapFactory
+import android.graphics.Bitmap
 import android.graphics.pdf.PdfDocument
 import android.net.Uri
 import android.os.Bundle
@@ -36,7 +37,7 @@ data class ToolItem(val id:String,val icon:String,val title:String,val subtitle:
  var active by remember{mutableStateOf<ToolItem?>(null)}
  CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl){
   MaterialTheme(colorScheme=lightColorScheme(primary=Navy,secondary=Sky,tertiary=Green,background=Bg)){
-   if(active==null) HomeScreen{active=it} else if(active!!.id=="pdf") ImageToPdfScreen{active=null} else Placeholder(active!!){active=null}
+   if(active==null) HomeScreen{active=it} else if(active!!.id=="pdf") ImageToPdfScreen{active=null} else if(active!!.id=="compress") CompressImageScreen{active=null} else Placeholder(active!!){active=null}
   }
  }
 }
@@ -54,4 +55,15 @@ fun createPdf(context:Context,uris:List<Uri>):File{
  try{uris.forEachIndexed{index,uri->val bitmap=context.contentResolver.openInputStream(uri).use{BitmapFactory.decodeStream(it)}?:throw IllegalArgumentException("تعذر قراءة إحدى الصور");val pw=1240;val ph=1754;val page=pdf.startPage(PdfDocument.PageInfo.Builder(pw,ph,index+1).create());val scale=minOf(pw.toFloat()/bitmap.width,ph.toFloat()/bitmap.height);val w=(bitmap.width*scale).toInt();val h=(bitmap.height*scale).toInt();val l=(pw-w)/2f;val t=(ph-h)/2f;page.canvas.drawBitmap(bitmap,null,android.graphics.RectF(l,t,l+w,t+h),null);pdf.finishPage(page);bitmap.recycle()};val dir=File(context.cacheDir,"pdfs").apply{mkdirs()};val out=File(dir,"Adawati-"+System.currentTimeMillis()+".pdf");out.outputStream().use{pdf.writeTo(it)};return out}finally{pdf.close()}
 }
 fun sharePdf(context:Context,file:File){val uri=FileProvider.getUriForFile(context,context.packageName+".fileprovider",file);val intent=Intent(Intent.ACTION_SEND).apply{type="application/pdf";putExtra(Intent.EXTRA_STREAM,uri);addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)};context.startActivity(Intent.createChooser(intent,"مشاركة PDF"))}
+@Composable fun CompressImageScreen(back:()->Unit){
+ BackHandler{back()};val context=LocalContext.current;var selected by remember{mutableStateOf<Uri?>(null)};var quality by remember{mutableFloatStateOf(75f)};var output by remember{mutableStateOf<File?>(null)};var message by remember{mutableStateOf("")}
+ val picker=rememberLauncherForActivityResult(ActivityResultContracts.GetContent()){selected=it;output=null;message=""}
+ Surface(Modifier.fillMaxSize(),color=Bg){Column(Modifier.fillMaxSize().padding(20.dp)){TextButton(onClick=back){Text("← رجوع")};Text("🖼️ ضغط الصور",fontSize=28.sp,color=Navy);Text("اختر صورة وحدد الجودة لتقليل حجمها.",color=Color.DarkGray);Spacer(Modifier.height(24.dp));Button(onClick={picker.launch("image/*")},modifier=Modifier.fillMaxWidth()){Text("اختيار صورة")};selected?.let{Spacer(Modifier.height(18.dp));Text("جودة الصورة: "+quality.toInt()+"%");Slider(value=quality,onValueChange={quality=it},valueRange=30f..95f);Button(onClick={try{output=compressImage(context,it,quality.toInt());message="تم ضغط الصورة بنجاح ✅"}catch(e:Exception){message="تعذر ضغط الصورة: "+(e.message?:"خطأ غير معروف")}},modifier=Modifier.fillMaxWidth()){Text("ضغط الصورة")}};if(message.isNotEmpty()){Spacer(Modifier.height(16.dp));Text(message,color=if(output!=null)Green else Color.Red)};output?.let{file->Text("الحجم الجديد: "+(file.length()/1024)+" KB",color=Color.DarkGray);Spacer(Modifier.height(10.dp));OutlinedButton(onClick={shareImage(context,file)},modifier=Modifier.fillMaxWidth()){Text("مشاركة الصورة المضغوطة")}}}}
+}
+fun compressImage(context:Context,uri:Uri,quality:Int):File{
+ val bitmap=context.contentResolver.openInputStream(uri).use{BitmapFactory.decodeStream(it)}?:throw IllegalArgumentException("تعذر قراءة الصورة")
+ val dir=File(context.cacheDir,"compressed").apply{mkdirs()};val out=File(dir,"Adawati-"+System.currentTimeMillis()+".jpg")
+ out.outputStream().use{bitmap.compress(Bitmap.CompressFormat.JPEG,quality,it)};bitmap.recycle();return out
+}
+fun shareImage(context:Context,file:File){val uri=FileProvider.getUriForFile(context,context.packageName+".fileprovider",file);val intent=Intent(Intent.ACTION_SEND).apply{type="image/jpeg";putExtra(Intent.EXTRA_STREAM,uri);addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)};context.startActivity(Intent.createChooser(intent,"مشاركة الصورة"))}
 @Composable fun Placeholder(tool:ToolItem,back:()->Unit){BackHandler{back()};Surface(Modifier.fillMaxSize(),color=Bg){Column(Modifier.fillMaxSize().padding(20.dp)){TextButton(onClick=back){Text("← رجوع")};Text(tool.icon+" "+tool.title,fontSize=28.sp,color=tool.accent);Spacer(Modifier.height(16.dp));Text("هذه الأداة قيد التفعيل.",color=Color.DarkGray)}}}

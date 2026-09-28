@@ -126,7 +126,7 @@ fun DocumentScannerScreen(back: () -> Unit) {
     BackHandler { back() }
     val context = LocalContext.current
 
-    var selected by remember { mutableStateOf<Uri?>(null) }
+    val pages = remember { mutableStateListOf<Uri>() }
     var cameraUri by remember { mutableStateOf<Uri?>(null) }
     var output by remember { mutableStateOf<File?>(null) }
     var message by remember { mutableStateOf("") }
@@ -134,19 +134,19 @@ fun DocumentScannerScreen(back: () -> Unit) {
 
     val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
         if (ok) {
-            selected = cameraUri
+            cameraUri?.let { pages.add(it) }
             output = null
-            message = "تم التقاط المستند ✅"
+            message = "تمت إضافة الصفحة " + pages.size + " ✅"
         } else {
             message = "تم إلغاء التصوير"
         }
     }
 
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        if (uri != null) {
-            selected = uri
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
+        if (uris.isNotEmpty()) {
+            pages.addAll(uris)
             output = null
-            message = "تم اختيار المستند ✅"
+            message = "تمت إضافة " + uris.size + " صفحة ✅"
         }
     }
 
@@ -154,8 +154,8 @@ fun DocumentScannerScreen(back: () -> Unit) {
         Column(Modifier.fillMaxSize().padding(20.dp)) {
             TextButton(onClick = back) { Text("← رجوع") }
             Text("📄 مسح مستند", fontSize = 28.sp, color = Navy)
-            Text("صوّر الورقة أو اخترها من الهاتف، حسّن وضوحها، ثم احفظها PDF.", color = Color.DarkGray)
-            Spacer(Modifier.height(24.dp))
+            Text("صوّر صفحة أو عدة صفحات، ثم اجمعها في ملف PDF واحد.", color = Color.DarkGray)
+            Spacer(Modifier.height(20.dp))
 
             Button(
                 onClick = {
@@ -165,7 +165,7 @@ fun DocumentScannerScreen(back: () -> Unit) {
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("📷 تصوير مستند")
+                Text(if (pages.isEmpty()) "📷 تصوير الصفحة الأولى" else "➕ تصوير صفحة جديدة")
             }
 
             Spacer(Modifier.height(10.dp))
@@ -174,28 +174,43 @@ fun DocumentScannerScreen(back: () -> Unit) {
                 onClick = { picker.launch("image/*") },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("🖼️ اختيار صورة من الهاتف")
+                Text("🖼️ إضافة صور من الهاتف")
             }
 
-            if (selected != null) {
+            if (pages.isNotEmpty()) {
                 Spacer(Modifier.height(18.dp))
+                Text("عدد الصفحات: " + pages.size, color = Green, fontSize = 18.sp)
 
+                Spacer(Modifier.height(8.dp))
                 Row(
                     Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Switch(checked = enhance, onCheckedChange = { enhance = it })
                     Spacer(Modifier.width(10.dp))
-                    Text(if (enhance) "تحسين وضوح المستند: مفعّل" else "تحسين وضوح المستند: متوقف")
+                    Text(if (enhance) "تحسين وضوح النص: مفعّل" else "تحسين وضوح النص: متوقف")
                 }
 
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = {
+                        if (pages.isNotEmpty()) {
+                            pages.removeAt(pages.lastIndex)
+                            output = null
+                            message = if (pages.isEmpty()) "تم حذف الصفحة" else "تم حذف آخر صفحة"
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("🗑️ حذف آخر صفحة")
+                }
 
+                Spacer(Modifier.height(8.dp))
                 Button(
                     onClick = {
                         try {
-                            output = createScannedPdf(context, selected!!, enhance)
-                            message = "تم إنشاء نسخة PDF للمستند ✅"
+                            output = createScannedPdf(context, pages.toList(), enhance)
+                            message = "تم إنشاء PDF من " + pages.size + " صفحة ✅"
                         } catch (e: Exception) {
                             output = null
                             message = "تعذر معالجة المستند: " + (e.message ?: "خطأ غير معروف")
@@ -203,17 +218,17 @@ fun DocumentScannerScreen(back: () -> Unit) {
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("إنشاء PDF")
+                    Text("📄 إنشاء PDF النهائي")
                 }
             }
 
             if (message.isNotEmpty()) {
-                Spacer(Modifier.height(16.dp))
-                Text(message, color = if (output != null || selected != null) Green else Color.Red)
+                Spacer(Modifier.height(14.dp))
+                Text(message, color = if (output != null || pages.isNotEmpty()) Green else Color.DarkGray)
             }
 
             output?.let { file ->
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(10.dp))
                 OutlinedButton(
                     onClick = { sharePdf(context, file) },
                     modifier = Modifier.fillMaxWidth()
@@ -224,7 +239,7 @@ fun DocumentScannerScreen(back: () -> Unit) {
 
             Spacer(Modifier.weight(1f))
             Text(
-                "النسخة الحالية تنظّف الصورة وتزيد وضوح النص. قص الحواف اليدوي سنضيفه بالخطوة التالية.",
+                "Scanner V2 — صفحات متعددة + تحسين النص. قص الحواف هو التطوير التالي.",
                 fontSize = 12.sp,
                 color = Color.Gray
             )
@@ -238,30 +253,37 @@ fun createCameraImageUri(context: Context): Uri {
     return FileProvider.getUriForFile(context, context.packageName + ".fileprovider", file)
 }
 
-fun createScannedPdf(context: Context, uri: Uri, enhance: Boolean): File {
-    val bitmap = context.contentResolver.openInputStream(uri).use {
-        BitmapFactory.decodeStream(it)
-    } ?: throw IllegalArgumentException("تعذر قراءة صورة المستند")
-
-    val processed = if (enhance) enhanceDocument(bitmap) else bitmap
-
+fun createScannedPdf(context: Context, uris: List<Uri>, enhance: Boolean): File {
+    require(uris.isNotEmpty()) { "لا توجد صفحات" }
     val pdf = PdfDocument()
     try {
-        val pw = 1240
-        val ph = 1754
-        val page = pdf.startPage(PdfDocument.PageInfo.Builder(pw, ph, 1).create())
-        val scale = minOf(pw.toFloat() / processed.width, ph.toFloat() / processed.height)
-        val w = (processed.width * scale).toInt()
-        val h = (processed.height * scale).toInt()
-        val l = (pw - w) / 2f
-        val t = (ph - h) / 2f
-        page.canvas.drawBitmap(
-            processed,
-            null,
-            android.graphics.RectF(l, t, l + w, t + h),
-            null
-        )
-        pdf.finishPage(page)
+        uris.forEachIndexed { index, uri ->
+            val bitmap = context.contentResolver.openInputStream(uri).use {
+                BitmapFactory.decodeStream(it)
+            } ?: throw IllegalArgumentException("تعذر قراءة الصفحة " + (index + 1))
+
+            val processed = if (enhance) enhanceDocument(bitmap) else bitmap
+            try {
+                val pw = 1240
+                val ph = 1754
+                val page = pdf.startPage(PdfDocument.PageInfo.Builder(pw, ph, index + 1).create())
+                val scale = minOf(pw.toFloat() / processed.width, ph.toFloat() / processed.height)
+                val w = (processed.width * scale).toInt()
+                val h = (processed.height * scale).toInt()
+                val l = (pw - w) / 2f
+                val t = (ph - h) / 2f
+                page.canvas.drawBitmap(
+                    processed,
+                    null,
+                    android.graphics.RectF(l, t, l + w, t + h),
+                    null
+                )
+                pdf.finishPage(page)
+            } finally {
+                if (processed !== bitmap) processed.recycle()
+                bitmap.recycle()
+            }
+        }
 
         val dir = File(context.cacheDir, "pdfs").apply { mkdirs() }
         val out = File(dir, "Scan-" + System.currentTimeMillis() + ".pdf")
@@ -269,8 +291,6 @@ fun createScannedPdf(context: Context, uri: Uri, enhance: Boolean): File {
         return out
     } finally {
         pdf.close()
-        if (processed !== bitmap) processed.recycle()
-        bitmap.recycle()
     }
 }
 

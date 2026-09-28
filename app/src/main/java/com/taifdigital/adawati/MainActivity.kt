@@ -35,6 +35,8 @@ import java.io.File
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
 import com.google.zxing.common.BitMatrix
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -544,12 +546,37 @@ fun QrToolsScreen(back: () -> Unit) {
     var qrBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var message by remember { mutableStateOf("") }
 
+    val scanLauncher = rememberLauncherForActivityResult(ScanContract()) { result ->
+        if (result.contents != null) {
+            text = result.contents
+            qrBitmap = null
+            message = "تمت قراءة QR بالكاميرا ✅"
+        } else {
+            message = "تم إلغاء المسح"
+        }
+    }
+
     Surface(Modifier.fillMaxSize(), color = Bg) {
         Column(Modifier.fillMaxSize().padding(20.dp)) {
             TextButton(onClick = back) { Text("← رجوع") }
             Text("▦ أدوات QR", fontSize = 28.sp, color = Green)
-            Text("أنشئ رمز QR لأي رابط أو نص وشاركه مباشرة.", color = Color.DarkGray)
-            Spacer(Modifier.height(22.dp))
+            Text("أنشئ رمز QR أو اقرأ رمزًا مباشرة بالكاميرا.", color = Color.DarkGray)
+            Spacer(Modifier.height(14.dp))
+
+            Button(
+                onClick = {
+                    val options = ScanOptions().apply {
+                        setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                        setPrompt("وجّه الكاميرا نحو رمز QR")
+                        setBeepEnabled(true)
+                        setOrientationLocked(true)
+                    }
+                    scanLauncher.launch(options)
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("📷 قراءة QR بالكاميرا") }
+
+            Spacer(Modifier.height(16.dp))
 
             OutlinedTextField(
                 value = text,
@@ -599,7 +626,7 @@ fun QrToolsScreen(back: () -> Unit) {
             }
 
             Spacer(Modifier.weight(1f))
-            Text("قراءة QR بالكاميرا ستكون الإضافة التالية.", fontSize = 12.sp, color = Color.Gray)
+            Text("بعد قراءة الرمز يظهر محتواه في مربع النص ويمكنك نسخه أو إنشاء QR جديد منه.", fontSize = 12.sp, color = Color.Gray)
         }
     }
 }

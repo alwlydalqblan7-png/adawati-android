@@ -139,7 +139,7 @@ fun DocumentScannerScreen(back: () -> Unit) {
     var cameraUri by remember { mutableStateOf<Uri?>(null) }
     var output by remember { mutableStateOf<File?>(null) }
     var message by remember { mutableStateOf("") }
-    var enhance by remember { mutableStateOf(true) }
+    var scanMode by remember { mutableStateOf("text") }
 
     val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
         if (ok) {
@@ -191,13 +191,26 @@ fun DocumentScannerScreen(back: () -> Unit) {
                 Text("عدد الصفحات: " + pages.size, color = Green, fontSize = 18.sp)
 
                 Spacer(Modifier.height(8.dp))
+                Text("نمط المسح", color = Navy)
                 Row(
                     Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Switch(checked = enhance, onCheckedChange = { enhance = it })
-                    Spacer(Modifier.width(10.dp))
-                    Text(if (enhance) "تحسين وضوح النص: مفعّل" else "تحسين وضوح النص: متوقف")
+                    FilterChip(
+                        selected = scanMode == "natural",
+                        onClick = { scanMode = "natural" },
+                        label = { Text("طبيعي") }
+                    )
+                    FilterChip(
+                        selected = scanMode == "text",
+                        onClick = { scanMode = "text" },
+                        label = { Text("تحسين نص") }
+                    )
+                    FilterChip(
+                        selected = scanMode == "bw",
+                        onClick = { scanMode = "bw" },
+                        label = { Text("أبيض وأسود") }
+                    )
                 }
 
                 Spacer(Modifier.height(8.dp))
@@ -218,7 +231,7 @@ fun DocumentScannerScreen(back: () -> Unit) {
                 Button(
                     onClick = {
                         try {
-                            output = createScannedPdf(context, pages.toList(), enhance)
+                            output = createScannedPdf(context, pages.toList(), scanMode)
                             message = "تم إنشاء PDF من " + pages.size + " صفحة ✅"
                         } catch (e: Exception) {
                             output = null
@@ -248,7 +261,7 @@ fun DocumentScannerScreen(back: () -> Unit) {
 
             Spacer(Modifier.weight(1f))
             Text(
-                "Scanner V2 — صفحات متعددة + تحسين النص. قص الحواف هو التطوير التالي.",
+                "Scanner V3 — صفحات متعددة + أنماط مسح. قص الحواف هو التطوير التالي.",
                 fontSize = 12.sp,
                 color = Color.Gray
             )
@@ -262,7 +275,7 @@ fun createCameraImageUri(context: Context): Uri {
     return FileProvider.getUriForFile(context, context.packageName + ".fileprovider", file)
 }
 
-fun createScannedPdf(context: Context, uris: List<Uri>, enhance: Boolean): File {
+fun createScannedPdf(context: Context, uris: List<Uri>, scanMode: String): File {
     require(uris.isNotEmpty()) { "لا توجد صفحات" }
     val pdf = PdfDocument()
     try {
@@ -271,7 +284,11 @@ fun createScannedPdf(context: Context, uris: List<Uri>, enhance: Boolean): File 
                 BitmapFactory.decodeStream(it)
             } ?: throw IllegalArgumentException("تعذر قراءة الصفحة " + (index + 1))
 
-            val processed = if (enhance) enhanceDocument(bitmap) else bitmap
+            val processed = when (scanMode) {
+                "text" -> enhanceDocument(bitmap)
+                "bw" -> blackAndWhiteDocument(bitmap)
+                else -> bitmap
+            }
             try {
                 val pw = 1240
                 val ph = 1754
@@ -324,6 +341,21 @@ fun enhanceDocument(source: Bitmap): Bitmap {
         colorFilter = ColorMatrixColorFilter(saturation)
     }
     canvas.drawBitmap(source, 0f, 0f, paint)
+    return target
+}
+
+fun blackAndWhiteDocument(source: Bitmap): Bitmap {
+    val gray = enhanceDocument(source)
+    val target = Bitmap.createBitmap(gray.width, gray.height, Bitmap.Config.ARGB_8888)
+    val pixels = IntArray(gray.width * gray.height)
+    gray.getPixels(pixels, 0, gray.width, 0, 0, gray.width, gray.height)
+    for (i in pixels.indices) {
+        val c = pixels[i]
+        val luminance = (AndroidColor.red(c) + AndroidColor.green(c) + AndroidColor.blue(c)) / 3
+        pixels[i] = if (luminance >= 150) AndroidColor.WHITE else AndroidColor.BLACK
+    }
+    target.setPixels(pixels, 0, gray.width, 0, 0, gray.width, gray.height)
+    gray.recycle()
     return target
 }
 

@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Color as AndroidColor
 import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
 import android.graphics.Paint
@@ -15,6 +16,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -22,6 +24,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
@@ -29,6 +32,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import java.io.File
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.MultiFormatWriter
+import com.google.zxing.common.BitMatrix
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -68,6 +74,7 @@ fun AdawatiApp() {
                 "scan" -> DocumentScannerScreen { active = null }
                 "pdf" -> ImageToPdfScreen { active = null }
                 "compress" -> CompressImageScreen { active = null }
+                "qr" -> QrToolsScreen { active = null }
                 else -> Placeholder(active!!) { active = null }
             }
         }
@@ -527,6 +534,92 @@ fun shareImage(context: Context, file: File) {
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
     context.startActivity(Intent.createChooser(intent, "مشاركة الصورة"))
+}
+
+@Composable
+fun QrToolsScreen(back: () -> Unit) {
+    BackHandler { back() }
+    val context = LocalContext.current
+    var text by remember { mutableStateOf("") }
+    var qrBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    var message by remember { mutableStateOf("") }
+
+    Surface(Modifier.fillMaxSize(), color = Bg) {
+        Column(Modifier.fillMaxSize().padding(20.dp)) {
+            TextButton(onClick = back) { Text("← رجوع") }
+            Text("▦ أدوات QR", fontSize = 28.sp, color = Green)
+            Text("أنشئ رمز QR لأي رابط أو نص وشاركه مباشرة.", color = Color.DarkGray)
+            Spacer(Modifier.height(22.dp))
+
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it; qrBitmap = null; message = "" },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("الرابط أو النص") },
+                minLines = 3
+            )
+            Spacer(Modifier.height(12.dp))
+
+            Button(
+                onClick = {
+                    if (text.isBlank()) {
+                        message = "اكتب رابطًا أو نصًا أولًا"
+                    } else {
+                        try {
+                            qrBitmap = generateQrBitmap(text.trim())
+                            message = "تم إنشاء رمز QR ✅"
+                        } catch (e: Exception) {
+                            message = "تعذر إنشاء QR"
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("إنشاء QR") }
+
+            qrBitmap?.let { bitmap ->
+                Spacer(Modifier.height(18.dp))
+                Image(
+                    bitmap = bitmap.asImageBitmap(),
+                    contentDescription = "QR",
+                    modifier = Modifier.size(240.dp).align(Alignment.CenterHorizontally)
+                )
+                Spacer(Modifier.height(12.dp))
+                OutlinedButton(
+                    onClick = {
+                        val file = saveQrImage(context, bitmap)
+                        shareImage(context, file)
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("📤 مشاركة QR") }
+            }
+
+            if (message.isNotEmpty()) {
+                Spacer(Modifier.height(12.dp))
+                Text(message, color = if (qrBitmap != null) Green else Color.DarkGray)
+            }
+
+            Spacer(Modifier.weight(1f))
+            Text("قراءة QR بالكاميرا ستكون الإضافة التالية.", fontSize = 12.sp, color = Color.Gray)
+        }
+    }
+}
+
+fun generateQrBitmap(content: String): Bitmap {
+    val matrix: BitMatrix = MultiFormatWriter().encode(content, BarcodeFormat.QR_CODE, 900, 900)
+    val bitmap = Bitmap.createBitmap(matrix.width, matrix.height, Bitmap.Config.ARGB_8888)
+    for (x in 0 until matrix.width) {
+        for (y in 0 until matrix.height) {
+            bitmap.setPixel(x, y, if (matrix[x, y]) AndroidColor.BLACK else AndroidColor.WHITE)
+        }
+    }
+    return bitmap
+}
+
+fun saveQrImage(context: Context, bitmap: Bitmap): File {
+    val dir = File(context.cacheDir, "compressed").apply { mkdirs() }
+    val out = File(dir, "QR-" + System.currentTimeMillis() + ".png")
+    out.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+    return out
 }
 
 @Composable

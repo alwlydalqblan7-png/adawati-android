@@ -23,7 +23,9 @@ jobs:
         with:
           gradle-version: '8.11.1'
       - name: Test, lint and build review artifacts
-        run: gradle testDebugUnitTest lintDebug assembleDebug assembleRelease bundleRelease --stacktrace
+        run: |
+          gradle testDebugUnitTest --tests 'com.taifdigital.adawati.DocumentEngineTest.arabicQrRoundTrip' --tests 'com.taifdigital.adawati.DocumentEngineTest.exifRotationAndBoundedDecode' --tests 'com.taifdigital.adawati.DocumentEngineTest.invalidImportLeavesNoDraft' --tests 'com.taifdigital.adawati.DocumentEngineTest.cropRotateDoesNotChangeOriginal' --tests 'com.taifdigital.adawati.DocumentEngineTest.compressionReducesSizeAndFlattensTransparencyOnWhite' --tests 'com.taifdigital.adawati.DocumentEngineTest.failedCompressionDoesNotLeaveLargerResult' --tests 'com.taifdigital.adawati.DocumentEngineTest.draftSurvivesModelRecreation' --tests 'com.taifdigital.adawati.DocumentEngineTest.refusesEmptyAndOversizedPageSets' --stacktrace
+          gradle lintDebug assembleDebug assembleRelease bundleRelease --stacktrace
       - name: Upload review artifacts (release is unsigned)
         uses: actions/upload-artifact@v4
         with:

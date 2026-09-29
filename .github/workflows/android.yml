@@ -1,0 +1,35 @@
+name: Validate and build Adawati
+on:
+  push:
+    branches: [main, 'fix/**']
+  pull_request:
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Test, lint and build review artifacts
+        run: gradle testDebugUnitTest lintDebug assembleDebug assembleRelease bundleRelease --stacktrace
+      - name: Upload review artifacts (release is unsigned)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Adawati-0.2.0-rc1-review
+          path: |
+            app/build/outputs/apk/debug/*.apk
+            app/build/outputs/apk/release/*.apk
+            app/build/outputs/bundle/release/*.aab
+            app/build/reports/tests/
+            app/build/reports/lint-results-debug.html
+          if-no-files-found: error
+          retention-days: 30

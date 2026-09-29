@@ -1,695 +1,262 @@
 package com.taifdigital.adawati
 
+import android.Manifest
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.Color as AndroidColor
-import android.graphics.ColorMatrix
-import android.graphics.ColorMatrixColorFilter
-import android.graphics.Paint
-import android.graphics.pdf.PdfDocument
+import android.graphics.Matrix
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.BackHandler
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.compose.setContent
+import androidx.activity.compose.*
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
+import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.unit.LayoutDirection
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.*
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
-import com.google.zxing.BarcodeFormat
-import com.google.zxing.MultiFormatWriter
-import com.google.zxing.common.BitMatrix
-import com.journeyapps.barcodescanner.ScanContract
-import com.journeyapps.barcodescanner.ScanOptions
 
 class MainActivity : ComponentActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContent { AdawatiApp() }
-    }
+    override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); setContent { AdawatiApp() } }
 }
-
 private val Navy = Color(0xFF1C3F66)
-private val Sky = Color(0xFF4FB7FF)
-private val Green = Color(0xFF3BB273)
-private val Bg = Color(0xFFF5F7FA)
-
-data class ToolItem(
-    val id: String,
-    val icon: String,
-    val title: String,
-    val subtitle: String,
-    val accent: Color
-)
 
 @Composable
-fun AdawatiApp() {
-    var active by remember { mutableStateOf<ToolItem?>(null) }
-
+fun AdawatiApp(model: ToolsModel = viewModel()) {
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-        MaterialTheme(
-            colorScheme = lightColorScheme(
-                primary = Navy,
-                secondary = Sky,
-                tertiary = Green,
-                background = Bg
-            )
-        ) {
-            when (active?.id) {
-                null -> HomeScreen { active = it }
-                "scan" -> DocumentScannerScreen { active = null }
-                "pdf" -> ImageToPdfScreen { active = null }
-                "compress" -> CompressImageScreen { active = null }
-                "qr" -> QrToolsScreen { active = null }
-                else -> Placeholder(active!!) { active = null }
-            }
-        }
-    }
-}
-
-@Composable
-fun HomeScreen(open: (ToolItem) -> Unit) {
-    val tools = listOf(
-        ToolItem("scan", "📄", "مسح مستند", "صوّر أوراقك وحوّلها إلى PDF", Navy),
-        ToolItem("pdf", "📑", "صورة إلى PDF", "اجمع صورك في ملف PDF", Sky),
-        ToolItem("qr", "▦", "أدوات QR", "قراءة وإنشاء رموز QR", Green),
-        ToolItem("compress", "🖼️", "ضغط الصور", "قلّل الحجم مع الحفاظ على الجودة", Navy)
-    )
-
-    Surface(Modifier.fillMaxSize(), color = Bg) {
-        Column(Modifier.fillMaxSize().padding(20.dp)) {
-            Text("أدواتي", fontSize = 32.sp, color = Navy)
-            Text("كل أدواتك... بمكان واحد", color = Color.DarkGray)
-            Spacer(Modifier.height(26.dp))
-
-            tools.chunked(2).forEach { row ->
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    row.forEach { tool ->
-                        Card(
-                            onClick = { open(tool) },
-                            modifier = Modifier.weight(1f).height(158.dp),
-                            shape = RoundedCornerShape(22.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color.White)
-                        ) {
-                            Column(
-                                Modifier.fillMaxSize().padding(16.dp),
-                                verticalArrangement = Arrangement.Center
-                            ) {
-                                Text(tool.icon, fontSize = 30.sp)
-                                Text(tool.title, fontSize = 19.sp, color = tool.accent)
-                                Text(tool.subtitle, fontSize = 12.sp, color = Color.Gray)
-                            }
-                        }
+        MaterialTheme(colorScheme = lightColorScheme(primary = Navy, secondary = Color(0xFF3BB273), background = Color(0xFFF5F7FA))) {
+            Surface(Modifier.fillMaxSize()) {
+                Column(Modifier.fillMaxSize().safeDrawingPadding().imePadding().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    BackHandler(model.screen != "home" || model.busy) { if (!model.busy) model.navigate("home") }
+                    if (model.screen != "home") TextButton(onClick = { model.navigate("home") }, enabled = !model.busy) { Text("رجوع إلى الأدوات") }
+                    if (model.busy) { LinearProgressIndicator(Modifier.fillMaxWidth()); Text(if (model.progress > 0) "تمت معالجة ${model.progress} صفحة…" else "جارٍ العمل…") }
+                    when (model.screen) {
+                        "home" -> Home(model)
+                        "scan", "pdf" -> PdfScreen(model)
+                        "compress" -> CompressScreen(model)
+                        "qr" -> QrScreen(model)
+                        "files" -> FilesScreen(model)
+                        "about" -> AboutScreen()
                     }
+                    if (model.message.isNotBlank()) Text(model.message)
                 }
-                Spacer(Modifier.height(12.dp))
             }
-
-            Spacer(Modifier.weight(1f))
-            Text("Taif Digital", Modifier.align(Alignment.CenterHorizontally), color = Navy)
         }
     }
 }
+@Composable private fun Heading(title: String, description: String) { Text(title, style = MaterialTheme.typography.headlineMedium, color = Navy); Text(description) }
+@Composable private fun Home(model: ToolsModel) {
+    Heading("أدواتي", "أدوات يومية عربية تعمل على هاتفك")
+    listOf("scan" to "مسح المستندات", "pdf" to "الصور إلى PDF", "compress" to "ضغط الصور", "qr" to "أدوات QR", "files" to "ملفاتي", "about" to "المساعدة والخصوصية").forEach { (id, title) ->
+        ElevatedCard(onClick = { model.navigate(id) }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) { Text(title, Modifier.padding(22.dp), style = MaterialTheme.typography.titleLarge) }
+    }
+    Text("Taif Digital • ${BuildConfig.VERSION_NAME}", color = Navy)
+}
 
-@Composable
-fun DocumentScannerScreen(back: () -> Unit) {
-    BackHandler { back() }
+@Composable private fun PdfScreen(model: ToolsModel) {
     val context = LocalContext.current
-
-    val pages = remember { mutableStateListOf<Uri>() }
-    var cameraUri by remember { mutableStateOf<Uri?>(null) }
-    var output by remember { mutableStateOf<File?>(null) }
-    var message by remember { mutableStateOf("") }
-    var scanMode by remember { mutableStateOf("text") }
-
-    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
-        if (ok) {
-            cameraUri?.let { pages.add(it) }
-            output = null
-            message = "تمت إضافة الصفحة " + pages.size + " ✅"
-        } else {
-            message = "تم إلغاء التصوير"
+    var mode by rememberSaveable { mutableStateOf("natural") }
+    var cameraPath by rememberSaveable { mutableStateOf<String?>(null) }
+    var editor by remember { mutableStateOf<Int?>(null) }
+    var clear by remember { mutableStateOf(false) }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { model.import(it) }
+    val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+        cameraPath?.let { path ->
+            val file = File(path)
+            if (ok && file.exists()) {
+                if (model.pages.size < DocumentEngine.MAX_PAGES) { model.pages.add(file); model.output = null; model.persist() }
+                else { file.delete(); model.message = "الحد الأقصى 30 صفحة" }
+            } else { file.delete(); model.message = "تم إلغاء التصوير" }
+        }
+        cameraPath = null
+    }
+    val launchCamera = {
+        try {
+            val file = DocumentEngine.newFile(context, "drafts", "jpg")
+            cameraPath = file.path
+            camera.launch(FileProvider.getUriForFile(context, context.packageName + ".fileprovider", file))
+        } catch (_: Exception) { cameraPath?.let { File(it).delete() }; cameraPath = null; model.message = "تعذر فتح الكاميرا. يمكنك اختيار صور من الهاتف." }
+    }
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) launchCamera() else model.message = "لم يُسمح بالكاميرا. فعّل الإذن من إعدادات التطبيق أو اختر صورًا من الهاتف."
+    }
+    Heading(if (model.screen == "scan") "مسح المستندات" else "الصور إلى PDF", "أضف الصفحات ورتّبها وقصّها قبل الحفظ. حتى 30 صفحة. المسودة مشتركة بين الأداتين.")
+    if (model.screen == "scan") Button(enabled = !model.busy && model.pages.size < 30, onClick = {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) launchCamera() else permission.launch(Manifest.permission.CAMERA)
+    }, modifier = Modifier.fillMaxWidth()) { Text("تصوير صفحة") }
+    OutlinedButton(enabled = !model.busy, onClick = { picker.launch("image/*") }, modifier = Modifier.fillMaxWidth()) { Text("إضافة صور من الهاتف") }
+    model.pages.toList().forEachIndexed { i, file ->
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) { Thumbnail(file, Modifier.size(64.dp)); Text("الصفحة ${i+1}", Modifier.padding(12.dp)) }
+                Row { TextButton(enabled = !model.busy, onClick = { editor = i }) { Text("قص وتدوير") }; TextButton(enabled = !model.busy, onClick = { model.remove(i) }) { Text("حذف") } }
+                Row { TextButton(enabled = !model.busy && i > 0, onClick = { model.move(i,-1) }) { Text("تقديم") }; TextButton(enabled = !model.busy && i < model.pages.lastIndex, onClick = { model.move(i,1) }) { Text("تأخير") } }
+            }
         }
     }
-
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
-        if (uris.isNotEmpty()) {
-            pages.addAll(uris)
-            output = null
-            message = "تمت إضافة " + uris.size + " صفحة ✅"
+    if (model.pages.isNotEmpty()) {
+        if (model.screen == "scan") {
+            Text("نمط المسح")
+            listOf("natural" to "طبيعي", "text" to "تحسين النص", "bw" to "أبيض وأسود").forEach { (id, name) ->
+                FilterChip(selected = mode == id, enabled = !model.busy, onClick = { mode = id; model.output = null }, label = { Text(name) })
+            }
         }
+        Button(enabled = !model.busy, onClick = { model.makePdf(if (model.screen == "scan") mode else "natural") }, modifier = Modifier.fillMaxWidth()) { Text("إنشاء PDF وحفظه في ملفاتي") }
+        TextButton(enabled = !model.busy, onClick = { clear = true }) { Text("بدء مسودة جديدة") }
     }
-
-    Surface(Modifier.fillMaxSize(), color = Bg) {
-        Column(Modifier.fillMaxSize().padding(20.dp)) {
-            TextButton(onClick = back) { Text("← رجوع") }
-            Text("📄 مسح مستند", fontSize = 28.sp, color = Navy)
-            Text("صوّر صفحة أو عدة صفحات، ثم اجمعها في ملف PDF واحد.", color = Color.DarkGray)
-            Spacer(Modifier.height(20.dp))
-
-            Button(
-                onClick = {
-                    val uri = createCameraImageUri(context)
-                    cameraUri = uri
-                    cameraLauncher.launch(uri)
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(if (pages.isEmpty()) "📷 تصوير الصفحة الأولى" else "➕ تصوير صفحة جديدة")
-            }
-
-            Spacer(Modifier.height(10.dp))
-
-            OutlinedButton(
-                onClick = { picker.launch("image/*") },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("🖼️ إضافة صور من الهاتف")
-            }
-
-            if (pages.isNotEmpty()) {
-                Spacer(Modifier.height(18.dp))
-                Text("عدد الصفحات: " + pages.size, color = Green, fontSize = 18.sp)
-
-                Spacer(Modifier.height(8.dp))
-                Text("نمط المسح", color = Navy)
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    FilterChip(
-                        selected = scanMode == "natural",
-                        onClick = { scanMode = "natural" },
-                        label = { Text("طبيعي") }
-                    )
-                    FilterChip(
-                        selected = scanMode == "text",
-                        onClick = { scanMode = "text" },
-                        label = { Text("تحسين نص") }
-                    )
-                    FilterChip(
-                        selected = scanMode == "bw",
-                        onClick = { scanMode = "bw" },
-                        label = { Text("أبيض وأسود") }
-                    )
-                }
-
-                Spacer(Modifier.height(8.dp))
-                OutlinedButton(
-                    onClick = {
-                        if (pages.isNotEmpty()) {
-                            pages.removeAt(pages.lastIndex)
-                            output = null
-                            message = if (pages.isEmpty()) "تم حذف الصفحة" else "تم حذف آخر صفحة"
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("🗑️ حذف آخر صفحة")
-                }
-
-                Spacer(Modifier.height(8.dp))
-                Button(
-                    onClick = {
-                        try {
-                            output = createScannedPdf(context, pages.toList(), scanMode)
-                            message = "تم إنشاء PDF من " + pages.size + " صفحة ✅"
-                        } catch (e: Exception) {
-                            output = null
-                            message = "تعذر معالجة المستند: " + (e.message ?: "خطأ غير معروف")
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("📄 إنشاء PDF النهائي")
-                }
-            }
-
-            if (message.isNotEmpty()) {
-                Spacer(Modifier.height(14.dp))
-                Text(message, color = if (output != null || pages.isNotEmpty()) Green else Color.DarkGray)
-            }
-
-            output?.let { file ->
-                Spacer(Modifier.height(10.dp))
-                OutlinedButton(
-                    onClick = { sharePdf(context, file) },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("مشاركة المستند PDF")
-                }
-            }
-
-            Spacer(Modifier.weight(1f))
-            Text(
-                "Scanner V3 — صفحات متعددة + أنماط مسح. قص الحواف هو التطوير التالي.",
-                fontSize = 12.sp,
-                color = Color.Gray
-            )
-        }
-    }
+    model.output?.let { FileActions(it, model) }
+    if (clear) AlertDialog(onDismissRequest = { clear = false }, title = { Text("حذف المسودة؟") }, text = { Text("لن تُحذف ملفات PDF التي أنشأتها.") }, confirmButton = { TextButton(onClick = { model.clearDraft(); clear = false }) { Text("حذف المسودة") } }, dismissButton = { TextButton(onClick = { clear = false }) { Text("إلغاء") } })
+    editor?.let { i -> if (i in model.pages.indices) EditDialog(model.pages[i], model.busy, { editor = null }) { rotation, l, t, r, b -> model.edit(i, rotation,l,t,r,b) { editor = null } } }
 }
 
-fun createCameraImageUri(context: Context): Uri {
-    val dir = File(context.cacheDir, "camera").apply { mkdirs() }
-    val file = File(dir, "scan-" + System.currentTimeMillis() + ".jpg")
-    return FileProvider.getUriForFile(context, context.packageName + ".fileprovider", file)
+@Composable private fun CompressScreen(model: ToolsModel) {
+    var quality by rememberSaveable { mutableFloatStateOf(75f) }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { if (it != null) model.import(listOf(it), true) }
+    Heading("ضغط الصور", "تصدير JPEG بخلفية بيضاء. الضغط قد يقلل التفاصيل؛ الصورة الأصلية تبقى دون تغيير.")
+    Button(enabled = !model.busy, onClick = { picker.launch("image/*") }) { Text("اختيار صورة") }
+    model.selected?.let { file ->
+        Thumbnail(file, Modifier.fillMaxWidth().height(180.dp))
+        Text("الحجم الأصلي: ${file.length()/1024} كيلوبايت")
+        Text("الجودة: ${quality.toInt()}٪")
+        Slider(value = quality, enabled = !model.busy, onValueChange = { quality = it; model.output = null }, valueRange = 30f..95f)
+        Button(enabled = !model.busy, onClick = { model.compress(quality.toInt()) }) { Text("ضغط وحفظ") }
+    }
+    model.output?.let { FileActions(it, model) }
 }
 
-fun createScannedPdf(context: Context, uris: List<Uri>, scanMode: String): File {
-    require(uris.isNotEmpty()) { "لا توجد صفحات" }
-    val pdf = PdfDocument()
+@Composable private fun QrScreen(model: ToolsModel) {
+    val context = LocalContext.current
+    val scan = rememberLauncherForActivityResult(com.journeyapps.barcodescanner.ScanContract()) {
+        if (it.contents != null) { model.qrText = it.contents; model.output = null; model.persist(); model.message = "تمت قراءة الرمز. راجع الرابط قبل فتحه." }
+        else model.message = "لم تتم قراءة رمز. تحقق من إذن الكاميرا وحاول مجددًا."
+    }
+    Heading("أدوات QR", "إنشاء رموز للنص العربي والروابط، أو قراءة رمز بالكاميرا.")
+    Button(enabled = !model.busy, onClick = {
+        try { scan.launch(com.journeyapps.barcodescanner.ScanOptions().setDesiredBarcodeFormats(com.journeyapps.barcodescanner.ScanOptions.QR_CODE).setPrompt("وجّه الكاميرا نحو الرمز").setBeepEnabled(false)) }
+        catch (_: Exception) { model.message = "تعذر تشغيل قارئ الكاميرا" }
+    }) { Text("قراءة بالكاميرا") }
+    OutlinedTextField(value = model.qrText, enabled = !model.busy, onValueChange = { model.qrText = it; model.output = null; model.persist() }, label = { Text("الرابط أو النص") }, modifier = Modifier.fillMaxWidth(), minLines = 3, maxLines = 8)
+    TextButton(enabled = model.qrText.isNotEmpty(), onClick = { (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("QR", model.qrText)); model.message = "تم النسخ" }) { Text("نسخ النص") }
+    Button(enabled = !model.busy && model.qrText.isNotBlank(), onClick = { model.makeQr() }) { Text("إنشاء وحفظ QR") }
+    model.output?.let { Thumbnail(it, Modifier.fillMaxWidth().height(240.dp)); FileActions(it, model) }
+}
+
+@Composable private fun FilesScreen(model: ToolsModel) {
+    var deleting by remember { mutableStateOf<File?>(null) }
+    Heading("ملفاتي", "الملفات محفوظة داخل التطبيق. احفظ نسخة خارجية قبل إلغاء تثبيته أو مسح بياناته.")
+    if (model.files.isEmpty()) Text("لا توجد ملفات بعد")
+    model.files.forEach { file ->
+        Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp)) {
+            Text(file.name); Text("${file.length()/1024} كيلوبايت")
+            FileActions(file, model)
+            TextButton(enabled = !model.busy, onClick = { deleting = file }) { Text("حذف") }
+        } }
+    }
+    deleting?.let { file -> AlertDialog(onDismissRequest = { deleting = null }, title = { Text("حذف الملف؟") }, text = { Text(file.name) }, confirmButton = { TextButton(onClick = { if (!file.delete()) model.message = "تعذر حذف الملف"; model.refresh(); deleting = null }) { Text("حذف") } }, dismissButton = { TextButton(onClick = { deleting = null }) { Text("إلغاء") } }) }
+}
+
+@Composable private fun FileActions(file: File, model: ToolsModel) {
+    val context = LocalContext.current
+    val mime = when (file.extension) { "pdf" -> "application/pdf"; "png" -> "image/png"; else -> "image/jpeg" }
+    var pendingPath by rememberSaveable { mutableStateOf<String?>(null) }
+    val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(mime)) { uri ->
+        val source = pendingPath?.let(::File)
+        if (uri != null && source != null) model.task {
+            withContext(Dispatchers.IO) {
+                require(source.exists()) { "الملف غير موجود" }
+                context.contentResolver.openOutputStream(uri, "wt").use { stream ->
+                    requireNotNull(stream) { "تعذر فتح مكان الحفظ" }; source.inputStream().use { it.copyTo(stream) }
+                }
+            }
+            model.message = "تم حفظ النسخة في المكان الذي اخترته"
+        }
+        pendingPath = null
+    }
+    OutlinedButton(enabled = !model.busy, onClick = { pendingPath = file.path; save.launch(file.name) }, modifier = Modifier.fillMaxWidth()) { Text("حفظ نسخة باسم…") }
+    Row {
+        TextButton(enabled = !model.busy, onClick = { openFile(context, file, mime, false) { model.message = it } }) { Text("فتح") }
+        TextButton(enabled = !model.busy, onClick = { openFile(context, file, mime, true) { model.message = it } }) { Text("مشاركة") }
+    }
+}
+private fun openFile(context: Context, file: File, mime: String, share: Boolean, error: (String) -> Unit) {
     try {
-        uris.forEachIndexed { index, uri ->
-            val bitmap = context.contentResolver.openInputStream(uri).use {
-                BitmapFactory.decodeStream(it)
-            } ?: throw IllegalArgumentException("تعذر قراءة الصفحة " + (index + 1))
-
-            val processed = when (scanMode) {
-                "text" -> enhanceDocument(bitmap)
-                "bw" -> blackAndWhiteDocument(bitmap)
-                else -> bitmap
-            }
-            try {
-                val pw = 1240
-                val ph = 1754
-                val page = pdf.startPage(PdfDocument.PageInfo.Builder(pw, ph, index + 1).create())
-                val scale = minOf(pw.toFloat() / processed.width, ph.toFloat() / processed.height)
-                val w = (processed.width * scale).toInt()
-                val h = (processed.height * scale).toInt()
-                val l = (pw - w) / 2f
-                val t = (ph - h) / 2f
-                page.canvas.drawBitmap(
-                    processed,
-                    null,
-                    android.graphics.RectF(l, t, l + w, t + h),
-                    null
-                )
-                pdf.finishPage(page)
-            } finally {
-                if (processed !== bitmap) processed.recycle()
-                bitmap.recycle()
-            }
+        val uri = FileProvider.getUriForFile(context, context.packageName + ".fileprovider", file)
+        val intent = Intent(if (share) Intent.ACTION_SEND else Intent.ACTION_VIEW).apply {
+            if (share) { type = mime; putExtra(Intent.EXTRA_STREAM, uri) } else setDataAndType(uri, mime)
+            clipData = ClipData.newRawUri(file.name, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-
-        val dir = File(context.cacheDir, "pdfs").apply { mkdirs() }
-        val out = File(dir, "Scan-" + System.currentTimeMillis() + ".pdf")
-        out.outputStream().use { pdf.writeTo(it) }
-        return out
-    } finally {
-        pdf.close()
-    }
+        context.startActivity(if (share) Intent.createChooser(intent, "مشاركة الملف") else intent)
+    } catch (_: Exception) { error("تعذر فتح الملف. ثبّت تطبيقًا مناسبًا أو استخدم حفظ نسخة باسم.") }
 }
 
-fun enhanceDocument(source: Bitmap): Bitmap {
-    val target = Bitmap.createBitmap(source.width, source.height, Bitmap.Config.ARGB_8888)
-    val canvas = android.graphics.Canvas(target)
-
-    val saturation = ColorMatrix().apply { setSaturation(0f) }
-    val contrast = 1.28f
-    val translate = (-0.5f * contrast + 0.5f) * 255f
-    val contrastMatrix = ColorMatrix(
-        floatArrayOf(
-            contrast, 0f, 0f, 0f, translate,
-            0f, contrast, 0f, 0f, translate,
-            0f, 0f, contrast, 0f, translate,
-            0f, 0f, 0f, 1f, 0f
-        )
-    )
-    saturation.postConcat(contrastMatrix)
-
-    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        colorFilter = ColorMatrixColorFilter(saturation)
+@Composable private fun Thumbnail(file: File, modifier: Modifier) {
+    val bitmap by produceState<Bitmap?>(null, file.path) {
+        value = withContext(Dispatchers.IO) { runCatching { DocumentEngine.decode(file, 500) }.getOrNull() }
     }
-    canvas.drawBitmap(source, 0f, 0f, paint)
-    return target
+    bitmap?.let { Image(it.asImageBitmap(), "معاينة الصورة", modifier) }
 }
 
-fun blackAndWhiteDocument(source: Bitmap): Bitmap {
-    val gray = enhanceDocument(source)
-    val target = Bitmap.createBitmap(gray.width, gray.height, Bitmap.Config.ARGB_8888)
-    val pixels = IntArray(gray.width * gray.height)
-    gray.getPixels(pixels, 0, gray.width, 0, 0, gray.width, gray.height)
-    for (i in pixels.indices) {
-        val c = pixels[i]
-        val luminance = (AndroidColor.red(c) + AndroidColor.green(c) + AndroidColor.blue(c)) / 3
-        pixels[i] = if (luminance >= 150) AndroidColor.WHITE else AndroidColor.BLACK
+@Composable private fun EditDialog(file: File, busy: Boolean, dismiss: () -> Unit, save: (Int, Float, Float, Float, Float) -> Unit) {
+    var horizontal by remember { mutableStateOf(0f..1f) }
+    var vertical by remember { mutableStateOf(0f..1f) }
+    var rotation by remember { mutableIntStateOf(0) }
+    val bitmap by produceState<Bitmap?>(null, file.path) { value = withContext(Dispatchers.IO) { runCatching { DocumentEngine.decode(file, 600) }.getOrNull() } }
+    val preview = remember(bitmap, horizontal, vertical, rotation) {
+        bitmap?.let { source ->
+            val x = (source.width * horizontal.start).toInt().coerceIn(0, source.width-1)
+            val y = (source.height * vertical.start).toInt().coerceIn(0, source.height-1)
+            val w = (source.width * (horizontal.endInclusive-horizontal.start)).toInt().coerceIn(1, source.width-x)
+            val h = (source.height * (vertical.endInclusive-vertical.start)).toInt().coerceIn(1, source.height-y)
+            Bitmap.createBitmap(source,x,y,w,h,Matrix().apply { postRotate(rotation.toFloat()) },true)
+        }
     }
-    target.setPixels(pixels, 0, gray.width, 0, 0, gray.width, gray.height)
-    gray.recycle()
-    return target
+    AlertDialog(onDismissRequest = { if (!busy) dismiss() }, title = { Text("قص وتدوير الصفحة") }, text = {
+        Column(Modifier.verticalScroll(rememberScrollState())) {
+            preview?.let { image ->
+                Box(Modifier.fillMaxWidth().height(200.dp)) {
+                    Image(image.asImageBitmap(), "معاينة نتيجة القص والتدوير", Modifier.fillMaxSize())
+                }
+            }
+            Text("حدود القص كنسبة من الصورة الأصلية؛ التدوير يُطبّق بعد القص.")
+            Text("من اليسار ${ (horizontal.start*100).toInt()}٪ إلى ${(horizontal.endInclusive*100).toInt()}٪")
+            RangeSlider(value = horizontal, enabled = !busy, onValueChange = { if (it.endInclusive-it.start >= .1f) horizontal = it })
+            Text("من الأعلى ${(vertical.start*100).toInt()}٪ إلى ${(vertical.endInclusive*100).toInt()}٪")
+            RangeSlider(value = vertical, enabled = !busy, onValueChange = { if (it.endInclusive-it.start >= .1f) vertical = it })
+            TextButton(enabled = !busy, onClick = { rotation = (rotation+90)%360 }) { Text("تدوير: $rotation درجة") }
+            Text("المعاينة تعرض النتيجة؛ لن تتغير الصورة الأصلية في هاتفك.")
+        }
+    }, confirmButton = { TextButton(enabled = !busy && bitmap != null, onClick = { save(rotation, horizontal.start, vertical.start, horizontal.endInclusive, vertical.endInclusive) }) { Text("تطبيق") } }, dismissButton = { TextButton(enabled = !busy, onClick = dismiss) { Text("إلغاء") } })
 }
 
-@Composable
-fun ImageToPdfScreen(back: () -> Unit) {
-    BackHandler { back() }
+@Composable private fun AboutScreen() {
     val context = LocalContext.current
-    var selected by remember { mutableStateOf<List<Uri>>(emptyList()) }
-    var message by remember { mutableStateOf("") }
-    var output by remember { mutableStateOf<File?>(null) }
-
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) {
-        selected = it
-        message = ""
-        output = null
-    }
-
-    Surface(Modifier.fillMaxSize(), color = Bg) {
-        Column(Modifier.fillMaxSize().padding(20.dp)) {
-            TextButton(onClick = back) { Text("← رجوع") }
-            Text("📑 صورة إلى PDF", fontSize = 28.sp, color = Sky)
-            Text("اختر صورة أو عدة صور ثم أنشئ ملف PDF.", color = Color.DarkGray)
-            Spacer(Modifier.height(24.dp))
-
-            Button(
-                onClick = { picker.launch("image/*") },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("اختيار الصور")
-            }
-
-            if (selected.isNotEmpty()) {
-                Spacer(Modifier.height(12.dp))
-                Text("تم اختيار " + selected.size + " صورة", color = Green)
-                Spacer(Modifier.height(12.dp))
-                Button(
-                    onClick = {
-                        try {
-                            output = createPdf(context, selected)
-                            message = "تم إنشاء PDF بنجاح ✅"
-                        } catch (e: Exception) {
-                            message = "تعذر إنشاء الملف: " + (e.message ?: "خطأ غير معروف")
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("إنشاء PDF")
-                }
-            }
-
-            if (message.isNotEmpty()) {
-                Spacer(Modifier.height(16.dp))
-                Text(message, color = if (output != null) Green else Color.Red)
-            }
-
-            output?.let { file ->
-                Spacer(Modifier.height(12.dp))
-                OutlinedButton(
-                    onClick = { sharePdf(context, file) },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("مشاركة ملف PDF")
-                }
-            }
-        }
-    }
-}
-
-fun createPdf(context: Context, uris: List<Uri>): File {
-    val pdf = PdfDocument()
-    try {
-        uris.forEachIndexed { index, uri ->
-            val bitmap = context.contentResolver.openInputStream(uri).use {
-                BitmapFactory.decodeStream(it)
-            } ?: throw IllegalArgumentException("تعذر قراءة إحدى الصور")
-
-            val pw = 1240
-            val ph = 1754
-            val page = pdf.startPage(PdfDocument.PageInfo.Builder(pw, ph, index + 1).create())
-            val scale = minOf(pw.toFloat() / bitmap.width, ph.toFloat() / bitmap.height)
-            val w = (bitmap.width * scale).toInt()
-            val h = (bitmap.height * scale).toInt()
-            val l = (pw - w) / 2f
-            val t = (ph - h) / 2f
-
-            page.canvas.drawBitmap(
-                bitmap,
-                null,
-                android.graphics.RectF(l, t, l + w, t + h),
-                null
-            )
-            pdf.finishPage(page)
-            bitmap.recycle()
-        }
-
-        val dir = File(context.cacheDir, "pdfs").apply { mkdirs() }
-        val out = File(dir, "Adawati-" + System.currentTimeMillis() + ".pdf")
-        out.outputStream().use { pdf.writeTo(it) }
-        return out
-    } finally {
-        pdf.close()
-    }
-}
-
-fun sharePdf(context: Context, file: File) {
-    val uri = FileProvider.getUriForFile(
-        context,
-        context.packageName + ".fileprovider",
-        file
-    )
-    val intent = Intent(Intent.ACTION_SEND).apply {
-        type = "application/pdf"
-        putExtra(Intent.EXTRA_STREAM, uri)
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    }
-    context.startActivity(Intent.createChooser(intent, "مشاركة PDF"))
-}
-
-@Composable
-fun CompressImageScreen(back: () -> Unit) {
-    BackHandler { back() }
-    val context = LocalContext.current
-    var selected by remember { mutableStateOf<Uri?>(null) }
-    var quality by remember { mutableFloatStateOf(75f) }
-    var output by remember { mutableStateOf<File?>(null) }
-    var message by remember { mutableStateOf("") }
-
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) {
-        selected = it
-        output = null
-        message = ""
-    }
-
-    Surface(Modifier.fillMaxSize(), color = Bg) {
-        Column(Modifier.fillMaxSize().padding(20.dp)) {
-            TextButton(onClick = back) { Text("← رجوع") }
-            Text("🖼️ ضغط الصور", fontSize = 28.sp, color = Navy)
-            Text("اختر صورة وحدد الجودة لتقليل حجمها.", color = Color.DarkGray)
-            Spacer(Modifier.height(24.dp))
-
-            Button(
-                onClick = { picker.launch("image/*") },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("اختيار صورة")
-            }
-
-            selected?.let {
-                Spacer(Modifier.height(18.dp))
-                Text("جودة الصورة: " + quality.toInt() + "%")
-                Slider(value = quality, onValueChange = { quality = it }, valueRange = 30f..95f)
-
-                Button(
-                    onClick = {
-                        try {
-                            output = compressImage(context, it, quality.toInt())
-                            message = "تم ضغط الصورة بنجاح ✅"
-                        } catch (e: Exception) {
-                            message = "تعذر ضغط الصورة: " + (e.message ?: "خطأ غير معروف")
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("ضغط الصورة")
-                }
-            }
-
-            if (message.isNotEmpty()) {
-                Spacer(Modifier.height(16.dp))
-                Text(message, color = if (output != null) Green else Color.Red)
-            }
-
-            output?.let { file ->
-                Text("الحجم الجديد: " + (file.length() / 1024) + " KB", color = Color.DarkGray)
-                Spacer(Modifier.height(10.dp))
-                OutlinedButton(
-                    onClick = { shareImage(context, file) },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("مشاركة الصورة المضغوطة")
-                }
-            }
-        }
-    }
-}
-
-fun compressImage(context: Context, uri: Uri, quality: Int): File {
-    val bitmap = context.contentResolver.openInputStream(uri).use {
-        BitmapFactory.decodeStream(it)
-    } ?: throw IllegalArgumentException("تعذر قراءة الصورة")
-
-    val dir = File(context.cacheDir, "compressed").apply { mkdirs() }
-    val out = File(dir, "Adawati-" + System.currentTimeMillis() + ".jpg")
-    out.outputStream().use {
-        bitmap.compress(Bitmap.CompressFormat.JPEG, quality, it)
-    }
-    bitmap.recycle()
-    return out
-}
-
-fun shareImage(context: Context, file: File) {
-    val uri = FileProvider.getUriForFile(
-        context,
-        context.packageName + ".fileprovider",
-        file
-    )
-    val intent = Intent(Intent.ACTION_SEND).apply {
-        type = "image/jpeg"
-        putExtra(Intent.EXTRA_STREAM, uri)
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    }
-    context.startActivity(Intent.createChooser(intent, "مشاركة الصورة"))
-}
-
-@Composable
-fun QrToolsScreen(back: () -> Unit) {
-    BackHandler { back() }
-    val context = LocalContext.current
-    var text by remember { mutableStateOf("") }
-    var qrBitmap by remember { mutableStateOf<Bitmap?>(null) }
-    var message by remember { mutableStateOf("") }
-
-    val scanLauncher = rememberLauncherForActivityResult(ScanContract()) { result ->
-        if (result.contents != null) {
-            text = result.contents
-            qrBitmap = null
-            message = "تمت قراءة QR بالكاميرا ✅"
-        } else {
-            message = "تم إلغاء المسح"
-        }
-    }
-
-    Surface(Modifier.fillMaxSize(), color = Bg) {
-        Column(Modifier.fillMaxSize().padding(20.dp)) {
-            TextButton(onClick = back) { Text("← رجوع") }
-            Text("▦ أدوات QR", fontSize = 28.sp, color = Green)
-            Text("أنشئ رمز QR أو اقرأ رمزًا مباشرة بالكاميرا.", color = Color.DarkGray)
-            Spacer(Modifier.height(14.dp))
-
-            Button(
-                onClick = {
-                    val options = ScanOptions().apply {
-                        setDesiredBarcodeFormats(ScanOptions.QR_CODE)
-                        setPrompt("وجّه الكاميرا نحو رمز QR")
-                        setBeepEnabled(true)
-                        setOrientationLocked(true)
-                    }
-                    scanLauncher.launch(options)
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) { Text("📷 قراءة QR بالكاميرا") }
-
-            Spacer(Modifier.height(16.dp))
-
-            OutlinedTextField(
-                value = text,
-                onValueChange = { text = it; qrBitmap = null; message = "" },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("الرابط أو النص") },
-                minLines = 3
-            )
-            Spacer(Modifier.height(12.dp))
-
-            Button(
-                onClick = {
-                    if (text.isBlank()) {
-                        message = "اكتب رابطًا أو نصًا أولًا"
-                    } else {
-                        try {
-                            qrBitmap = generateQrBitmap(text.trim())
-                            message = "تم إنشاء رمز QR ✅"
-                        } catch (e: Exception) {
-                            message = "تعذر إنشاء QR"
-                        }
-                    }
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) { Text("إنشاء QR") }
-
-            qrBitmap?.let { bitmap ->
-                Spacer(Modifier.height(18.dp))
-                Image(
-                    bitmap = bitmap.asImageBitmap(),
-                    contentDescription = "QR",
-                    modifier = Modifier.size(240.dp).align(Alignment.CenterHorizontally)
-                )
-                Spacer(Modifier.height(12.dp))
-                OutlinedButton(
-                    onClick = {
-                        val file = saveQrImage(context, bitmap)
-                        shareImage(context, file)
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("📤 مشاركة QR") }
-            }
-
-            if (message.isNotEmpty()) {
-                Spacer(Modifier.height(12.dp))
-                Text(message, color = if (qrBitmap != null) Green else Color.DarkGray)
-            }
-
-            Spacer(Modifier.weight(1f))
-            Text("بعد قراءة الرمز يظهر محتواه في مربع النص ويمكنك نسخه أو إنشاء QR جديد منه.", fontSize = 12.sp, color = Color.Gray)
-        }
-    }
-}
-
-fun generateQrBitmap(content: String): Bitmap {
-    val matrix: BitMatrix = MultiFormatWriter().encode(content, BarcodeFormat.QR_CODE, 900, 900)
-    val bitmap = Bitmap.createBitmap(matrix.width, matrix.height, Bitmap.Config.ARGB_8888)
-    for (x in 0 until matrix.width) {
-        for (y in 0 until matrix.height) {
-            bitmap.setPixel(x, y, if (matrix[x, y]) AndroidColor.BLACK else AndroidColor.WHITE)
-        }
-    }
-    return bitmap
-}
-
-fun saveQrImage(context: Context, bitmap: Bitmap): File {
-    val dir = File(context.cacheDir, "compressed").apply { mkdirs() }
-    val out = File(dir, "QR-" + System.currentTimeMillis() + ".png")
-    out.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
-    return out
-}
-
-@Composable
-fun Placeholder(tool: ToolItem, back: () -> Unit) {
-    BackHandler { back() }
-    Surface(Modifier.fillMaxSize(), color = Bg) {
-        Column(Modifier.fillMaxSize().padding(20.dp)) {
-            TextButton(onClick = back) { Text("← رجوع") }
-            Text(tool.icon + " " + tool.title, fontSize = 28.sp, color = tool.accent)
-            Spacer(Modifier.height(16.dp))
-            Text("هذه الأداة قيد التفعيل.", color = Color.DarkGray)
-        }
-    }
+    Heading("أدواتي • Taif Digital", "الإصدار ${BuildConfig.VERSION_NAME}")
+    Text("ابدأ باختيار أداة، ثم صورة أو صفحات. الملفات الناتجة تُحفظ في «ملفاتي». استخدم «حفظ نسخة باسم» لحفظها خارج التطبيق، أو «مشاركة» لإرسالها.")
+    Text("الخصوصية", style = MaterialTheme.typography.titleLarge)
+    Text("تتم معالجة الصور والمستندات محليًا. هذا الإصدار لا يتصل بالإنترنت ولا يحتوي إعلانات أو أدوات تتبع أو حسابات مستخدمين. نطلب إذن الكاميرا عند استخدامها فقط. الصور التي تختارها تُنسخ إلى مساحة التطبيق للاحتفاظ بالمسودة.")
+    Text("تبقى الملفات والمسودات داخل التطبيق حتى حذفها أو مسح بيانات التطبيق أو إلغاء تثبيته. النسخ التي تحفظها خارجه تخضع لإدارة المكان الذي تختاره. عند المشاركة تتعامل التطبيقات المستقبلة مع الملف وفق سياساتها. النسخ الاحتياطي التلقائي لبيانات التطبيق معطّل.")
+    Text("لا توجد مشتريات أو اشتراكات في هذا الإصدار. قص الصفحات يدوي؛ لا يتضمن التعرف الضوئي على النصوص أو تصحيح المنظور التلقائي.")
+    OutlinedButton(onClick = {
+        try { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/alwlydalqblan7-png/adawati-android/issues"))) }
+        catch (_: Exception) { }
+    }) { Text("الدعم والإبلاغ عن مشكلة") }
+    Text("لا ترفق صور مستندات شخصية في البلاغات العامة.")
 }

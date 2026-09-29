@@ -31,6 +31,15 @@ class DocumentEngineTest {
         bitmap.recycle()
         return file
     }
+
+    private fun pngImage(w: Int = 400, h: Int = 200): File {
+        val bitmap = Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888)
+        bitmap.eraseColor(Color.BLUE)
+        val file = File.createTempFile("source", ".png", context.cacheDir)
+        file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG,100,it) }
+        bitmap.recycle()
+        return file
+    }
     @Test fun arabicQrRoundTrip() {
         val text = "أدواتي — مستند عربي 💙 https://example.com/مسار"
         val bitmap = DocumentEngine.qr(text)
@@ -50,7 +59,7 @@ class DocumentEngineTest {
     }
     @GraphicsMode(GraphicsMode.Mode.LEGACY)
     @Test fun pdfIsA4AndRetainsAllPages() {
-        val source = image()
+        val source = pngImage()
         val progress = mutableListOf<Int>()
         val result = DocumentEngine.pdf(context,listOf(source,source),"natural") { progress.add(it) }
         assertEquals(File(context.filesDir,"exports"),result.parentFile)
@@ -78,10 +87,10 @@ class DocumentEngineTest {
     }
     @GraphicsMode(GraphicsMode.Mode.LEGACY)
     @Test fun failedPdfLeavesNoPartialExport() {
-        val invalid = File(context.cacheDir,"broken.jpg").apply { writeText("broken") }
+        val invalid = File(context.cacheDir,"broken.txt").apply { writeText("broken") }
         val dir = DocumentEngine.directory(context,"exports")
         val before = dir.list()!!.toSet()
-        assertThrows(IllegalArgumentException::class.java) { DocumentEngine.pdf(context,listOf(image(),invalid),"natural") {} }
+        assertThrows(IllegalArgumentException::class.java) { DocumentEngine.pdf(context,listOf(pngImage(),invalid),"natural") {} }
         assertEquals(before,dir.list()!!.toSet())
     }
     @Test fun compressionReducesSizeAndFlattensTransparencyOnWhite() {

@@ -74,34 +74,43 @@ object DocumentEngine {
     fun pdf(context: Context, files: List<File>, mode: String, progress: (Int) -> Unit): File {
         require(files.size in 1..MAX_PAGES) { "اختر من صفحة إلى 30 صفحة" }
         val out = newFile(context, "exports", "pdf")
+        val pdf = PdfDocument()
         try {
-            PdfDocument().use { pdf ->
-                files.forEachIndexed { index, file ->
-                    val source = decode(file)
-                    var processed = source
-                    try {
-                        processed = when (mode) {
-                            "text" -> enhanceDocument(source)
-                            "bw" -> blackAndWhiteDocument(source)
-                            else -> source
-                        }
-                        val page = pdf.startPage(PdfDocument.PageInfo.Builder(595, 842, index + 1).create())
-                        page.canvas.drawColor(Color.WHITE)
-                        val scale = minOf(571f / processed.width, 818f / processed.height)
-                        val w = processed.width * scale
-                        val h = processed.height * scale
-                        page.canvas.drawBitmap(processed, null, RectF((595-w)/2, (842-h)/2, (595+w)/2, (842+h)/2), Paint(Paint.FILTER_BITMAP_FLAG))
-                        pdf.finishPage(page)
-                    } finally {
-                        if (processed !== source) processed.recycle()
-                        source.recycle()
+            files.forEachIndexed { index, file ->
+                val source = decode(file)
+                var processed = source
+                try {
+                    processed = when (mode) {
+                        "text" -> enhanceDocument(source)
+                        "bw" -> blackAndWhiteDocument(source)
+                        else -> source
                     }
-                    progress(index + 1)
+                    val page = pdf.startPage(PdfDocument.PageInfo.Builder(595, 842, index + 1).create())
+                    page.canvas.drawColor(Color.WHITE)
+                    val scale = minOf(571f / processed.width, 818f / processed.height)
+                    val w = processed.width * scale
+                    val h = processed.height * scale
+                    page.canvas.drawBitmap(
+                        processed,
+                        null,
+                        RectF((595 - w) / 2, (842 - h) / 2, (595 + w) / 2, (842 + h) / 2),
+                        Paint(Paint.FILTER_BITMAP_FLAG)
+                    )
+                    pdf.finishPage(page)
+                } finally {
+                    if (processed !== source) processed.recycle()
+                    source.recycle()
                 }
-                out.outputStream().use { pdf.writeTo(it) }
+                progress(index + 1)
             }
+            out.outputStream().use { pdf.writeTo(it) }
             return out
-        } catch (e: Throwable) { out.delete(); throw e }
+        } catch (e: Throwable) {
+            out.delete()
+            throw e
+        } finally {
+            pdf.close()
+        }
     }
 
     fun compress(context: Context, source: File, quality: Int): File {

@@ -14,6 +14,7 @@ android {
         targetSdk = 36
         versionCode = 2
         versionName = "0.2.0-rc1"
+        manifestPlaceholders["appLabel"] = "أدواتي"
     }
 
     val releaseStore = providers.environmentVariable("ADAWATI_KEYSTORE_PATH").orNull
@@ -26,6 +27,11 @@ android {
         }
     }
     buildTypes {
+        getByName("debug") {
+            applicationIdSuffix = ".preview"
+            versionNameSuffix = "-preview"
+            manifestPlaceholders["appLabel"] = "أدواتي — تجربة"
+        }
         getByName("release") {
             isDebuggable = false
             if (releaseStore != null) signingConfig = signingConfigs.getByName("production")

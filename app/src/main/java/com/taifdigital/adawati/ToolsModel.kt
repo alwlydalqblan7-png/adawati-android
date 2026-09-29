@@ -22,9 +22,10 @@ class ToolsModel(app: Application) : AndroidViewModel(app) {
     init {
         prefs.getString("pages", "")!!.split('|').filter { it.isNotBlank() }.map(::File).filter { it.exists() }.forEach { pages.add(it) }
         selected = prefs.getString("selected", null)?.let(::File)?.takeIf { it.exists() }
+        output = prefs.getString("output", null)?.let(::File)?.takeIf { it.exists() }
         refresh()
     }
-    fun persist() { prefs.edit().putString("pages", pages.joinToString("|") { it.path }).putString("selected", selected?.path).putString("screen", screen).putString("qr", qrText).apply() }
+    fun persist() { prefs.edit().putString("pages", pages.joinToString("|") { it.path }).putString("selected", selected?.path).putString("output", output?.path).putString("screen", screen).putString("qr", qrText).apply() }
     fun navigate(value: String) { if (!busy) { screen = value; message = ""; output = null; persist() } }
     fun refresh() { files = DocumentEngine.directory(getApplication(), "exports").listFiles()?.filter { it.isFile && it.length() > 0 }?.sortedByDescending { it.lastModified() } ?: emptyList() }
     fun task(work: suspend () -> Unit) {

@@ -82,6 +82,29 @@ class DocumentEngineTest {
         assertThrows(IllegalArgumentException::class.java) { DocumentEngine.pdf(context,listOf(image(),invalid),"natural") {} }
         assertEquals(before,dir.list()!!.toSet())
     }
+    @Test fun compressionReducesSizeAndFlattensTransparencyOnWhite() {
+        val bitmap = Bitmap.createBitmap(300,300,Bitmap.Config.ARGB_8888)
+        val random = java.util.Random(42)
+        for (x in 30 until 270) for (y in 30 until 270) bitmap.setPixel(x,y,Color.rgb(random.nextInt(256),random.nextInt(256),random.nextInt(256)))
+        val file = File.createTempFile("transparent", ".png", context.cacheDir)
+        file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG,100,it) }; bitmap.recycle()
+        val result = DocumentEngine.compress(context,file,70)
+        assertTrue(result.length() < file.length())
+        val decoded = DocumentEngine.decode(result)
+        assertTrue(Color.red(decoded.getPixel(0,0)) > 245)
+        assertTrue(Color.green(decoded.getPixel(0,0)) > 245)
+        assertTrue(Color.blue(decoded.getPixel(0,0)) > 245)
+        decoded.recycle()
+    }
+    @Test fun failedCompressionDoesNotLeaveLargerResult() {
+        val bitmap = Bitmap.createBitmap(1,1,Bitmap.Config.ARGB_8888)
+        val file = File.createTempFile("tiny", ".png", context.cacheDir)
+        file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG,100,it) }; bitmap.recycle()
+        val dir = DocumentEngine.directory(context,"exports")
+        val before = dir.list()!!.toSet()
+        assertThrows(IllegalArgumentException::class.java) { DocumentEngine.compress(context,file,95) }
+        assertEquals(before,dir.list()!!.toSet())
+    }
     @Test fun draftSurvivesModelRecreation() {
         val app = ApplicationProvider.getApplicationContext<android.app.Application>()
         app.getSharedPreferences("draft_state", 0).edit().clear().commit()

@@ -1,7 +1,7 @@
 name: Validate and build Adawati
 on:
   push:
-    branches: [main, 'fix/**']
+    branches: [main]
   pull_request:
   workflow_dispatch:
 jobs:

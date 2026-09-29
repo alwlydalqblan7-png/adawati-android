@@ -23,9 +23,7 @@ jobs:
         with:
           gradle-version: '8.11.1'
       - name: Test, lint and build review artifacts
-        run: |
-          gradle testDebugUnitTest --tests 'com.taifdigital.adawati.DocumentEngineTest.arabicQrRoundTrip' --tests 'com.taifdigital.adawati.DocumentEngineTest.exifRotationAndBoundedDecode' --tests 'com.taifdigital.adawati.DocumentEngineTest.invalidImportLeavesNoDraft' --tests 'com.taifdigital.adawati.DocumentEngineTest.cropRotateDoesNotChangeOriginal' --tests 'com.taifdigital.adawati.DocumentEngineTest.compressionReducesSizeAndFlattensTransparencyOnWhite' --tests 'com.taifdigital.adawati.DocumentEngineTest.failedCompressionDoesNotLeaveLargerResult' --tests 'com.taifdigital.adawati.DocumentEngineTest.draftSurvivesModelRecreation' --tests 'com.taifdigital.adawati.DocumentEngineTest.refusesEmptyAndOversizedPageSets' --stacktrace
-          gradle lintDebug assembleDebug assembleRelease bundleRelease --stacktrace
+        run: gradle testDebugUnitTest lintDebug assembleDebug assembleRelease bundleRelease --stacktrace
       - name: Upload review artifacts (release is unsigned)
         uses: actions/upload-artifact@v4
         with:
@@ -37,4 +35,44 @@ jobs:
             app/build/reports/tests/
             app/build/reports/lint-results-debug.html
           if-no-files-found: error
+          retention-days: 30
+
+  android-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;35.0.0'
+          log-accepted-android-sdk-licenses: false
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          script: gradle connectedDebugAndroidTest --stacktrace
+      - name: Upload Android test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Adawati-Android-tests
+          path: |
+            app/build/reports/androidTests/
+            app/build/outputs/androidTest-results/
           retention-days: 30

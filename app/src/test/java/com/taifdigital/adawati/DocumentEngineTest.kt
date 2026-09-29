@@ -48,6 +48,7 @@ class DocumentEngineTest {
         assertEquals(bitmap.width*2,bitmap.height)
         bitmap.recycle()
     }
+    @GraphicsMode(GraphicsMode.Mode.LEGACY)
     @Test fun pdfIsA4AndRetainsAllPages() {
         val source = image()
         val progress = mutableListOf<Int>()
@@ -75,6 +76,7 @@ class DocumentEngineTest {
         assertArrayEquals(original,source.readBytes())
         bitmap.recycle()
     }
+    @GraphicsMode(GraphicsMode.Mode.LEGACY)
     @Test fun failedPdfLeavesNoPartialExport() {
         val invalid = File(context.cacheDir,"broken.jpg").apply { writeText("broken") }
         val dir = DocumentEngine.directory(context,"exports")

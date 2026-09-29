@@ -3,7 +3,7 @@
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
     <application android:theme="@style/Theme.Adawati" android:label="${appLabel}"
         android:icon="@drawable/ic_launcher" android:roundIcon="@drawable/ic_launcher"
-        android:supportsRtl="true" android:allowBackup="false">
+        android:supportsRtl="true" android:allowBackup="false" android:dataExtractionRules="@xml/data_extraction_rules">
         <provider android:name="androidx.core.content.FileProvider" android:authorities="${applicationId}.fileprovider"
             android:exported="false" android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths"/>

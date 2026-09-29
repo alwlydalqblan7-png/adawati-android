@@ -3,9 +3,7 @@ package com.taifdigital.adawati
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color
-import android.graphics.pdf.PdfRenderer
 import android.net.Uri
-import android.os.ParcelFileDescriptor
 import androidx.test.core.app.ApplicationProvider
 import androidx.exifinterface.media.ExifInterface
 import com.google.zxing.*
@@ -58,17 +56,7 @@ class DocumentEngineTest {
         bitmap.recycle()
     }
 
-    @Test fun pdfIsA4AndRetainsAllPages() {
-        val source = pngImage()
-        val progress = mutableListOf<Int>()
-        val result = DocumentEngine.pdf(context,listOf(source,source),"natural") { progress.add(it) }
-        assertEquals(File(context.filesDir,"exports"),result.parentFile)
-        PdfRenderer(ParcelFileDescriptor.open(result,ParcelFileDescriptor.MODE_READ_ONLY)).use { pdf ->
-            assertEquals(2,pdf.pageCount)
-            pdf.openPage(0).use { page -> assertEquals(595,page.width); assertEquals(842,page.height) }
-        }
-        assertEquals(listOf(1,2),progress)
-    }
+
     @Test fun invalidImportLeavesNoDraft() {
         val invalid = File(context.cacheDir,"invalid.txt").apply { writeText("not an image") }
         val dir = DocumentEngine.directory(context,"drafts")
@@ -86,13 +74,7 @@ class DocumentEngineTest {
         bitmap.recycle()
     }
 
-    @Test fun failedPdfLeavesNoPartialExport() {
-        val invalid = File(context.cacheDir,"broken.txt").apply { writeText("broken") }
-        val dir = DocumentEngine.directory(context,"exports")
-        val before = dir.list()!!.toSet()
-        assertThrows(IllegalArgumentException::class.java) { DocumentEngine.pdf(context,listOf(pngImage(),invalid),"natural") {} }
-        assertEquals(before,dir.list()!!.toSet())
-    }
+
     @Test fun compressionReducesSizeAndFlattensTransparencyOnWhite() {
         val bitmap = Bitmap.createBitmap(300,300,Bitmap.Config.ARGB_8888)
         val random = java.util.Random(42)

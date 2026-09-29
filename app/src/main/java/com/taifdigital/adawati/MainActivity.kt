@@ -17,6 +17,8 @@ import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -64,8 +66,37 @@ fun AdawatiApp(model: ToolsModel = viewModel()) {
 @Composable private fun Heading(title: String, description: String) { Text(title, style = MaterialTheme.typography.headlineMedium, color = Navy); Text(description) }
 @Composable private fun Home(model: ToolsModel) {
     Heading("أدواتي", "أدوات يومية عربية تعمل على هاتفك")
-    listOf("scan" to "مسح المستندات", "pdf" to "الصور إلى PDF", "compress" to "ضغط الصور", "qr" to "أدوات QR", "files" to "ملفاتي", "about" to "المساعدة والخصوصية").forEach { (id, title) ->
-        ElevatedCard(onClick = { model.navigate(id) }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) { Text(title, Modifier.padding(22.dp), style = MaterialTheme.typography.titleLarge) }
+    val tools = listOf(
+        Triple("scan", "مسح المستندات", Icons.Outlined.DocumentScanner),
+        Triple("pdf", "الصور إلى PDF", Icons.Outlined.PictureAsPdf),
+        Triple("compress", "ضغط الصور", Icons.Outlined.Compress),
+        Triple("qr", "أدوات QR", Icons.Outlined.QrCode2),
+        Triple("files", "ملفاتي", Icons.Outlined.Folder),
+        Triple("about", "المساعدة والخصوصية", Icons.Outlined.Security)
+    )
+    tools.forEach { (id, title, icon) ->
+        ElevatedCard(
+            onClick = { model.navigate(id) },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(18.dp)
+        ) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 18.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = Navy.copy(alpha = 0.10f),
+                    modifier = Modifier.size(52.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(icon, contentDescription = null, tint = Navy, modifier = Modifier.size(28.dp))
+                    }
+                }
+                Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+            }
+        }
     }
     Text("Taif Digital • ${BuildConfig.VERSION_NAME}", color = Navy)
 }

@@ -82,6 +82,20 @@ class DocumentEngineTest {
         assertThrows(IllegalArgumentException::class.java) { DocumentEngine.pdf(context,listOf(image(),invalid),"natural") {} }
         assertEquals(before,dir.list()!!.toSet())
     }
+    @Test fun draftSurvivesModelRecreation() {
+        val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+        app.getSharedPreferences("draft_state", 0).edit().clear().commit()
+        val first = ToolsModel(app)
+        val source = image()
+        first.pages.add(source)
+        first.screen = "scan"
+        first.qrText = "نص محفوظ"
+        first.persist()
+        val second = ToolsModel(app)
+        assertEquals(source.path, second.pages.single().path)
+        assertEquals("scan", second.screen)
+        assertEquals("نص محفوظ", second.qrText)
+    }
     @Test fun refusesEmptyAndOversizedPageSets() {
         assertThrows(IllegalArgumentException::class.java) { DocumentEngine.pdf(context,emptyList(),"natural") {} }
         assertThrows(IllegalArgumentException::class.java) { DocumentEngine.pdf(context,List(31) { image() },"natural") {} }
